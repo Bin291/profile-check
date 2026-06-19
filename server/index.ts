@@ -5,7 +5,20 @@ import nodemailer from 'nodemailer';
 
 const app = express();
 
-app.use(cors({ origin: ['http://localhost:3000', 'http://0.0.0.0:3000'] }));
+// Local dev origins + production frontend(s) from ALLOWED_ORIGINS (comma-separated)
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://0.0.0.0:3000',
+  ...(process.env.ALLOWED_ORIGINS?.split(',').map((o) => o.trim()).filter(Boolean) ?? []),
+];
+
+app.use(cors({
+  origin: (origin, cb) => {
+    // allow non-browser requests (no Origin header) like health checks / curl
+    if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+    return cb(new Error(`Origin not allowed by CORS: ${origin}`));
+  },
+}));
 app.use(express.json());
 
 const transporter = nodemailer.createTransport({
@@ -157,6 +170,10 @@ function buildEmailHtml(name: string, email: string, message: string) {
 </html>
   `.trim();
 }
+
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'ok' });
+});
 
 app.post('/api/contact', async (req, res) => {
   const { name, email, message } = req.body;

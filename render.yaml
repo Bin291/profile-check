@@ -1,0 +1,17 @@
+# Render Blueprint — deploys the Express + nodemailer email API (server/index.ts).
+# Render dashboard: New → Blueprint → connect this repo → it reads this file.
+services:
+  - type: web
+    name: npb-portfolio-api
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    envVars:
+      - key: GMAIL_USER
+        sync: false # set in dashboard
+      - key: GMAIL_PASS
+        sync: false # Gmail App Password (16 chars, no spaces)
+      - key: ALLOWED_ORIGINS
+        sync: false # your Cloudflare URL, e.g. https://my-profile.pages.dev

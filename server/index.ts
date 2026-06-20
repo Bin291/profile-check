@@ -27,8 +27,10 @@ app.use(express.json());
 
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
-  port: 587,
-  secure: false,
+  port: 465,
+  secure: true,
+  connectionTimeout: 15000, // fail fast instead of hanging ~120s
+  greetingTimeout: 15000,
   auth: {
     user: process.env.GMAIL_USER,
     pass: process.env.GMAIL_PASS,
@@ -176,7 +178,11 @@ function buildEmailHtml(name: string, email: string, message: string) {
 }
 
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok' });
+  res.json({
+    status: 'ok',
+    build: 'smtp-465-ipv4',
+    dnsOrder: dns.getDefaultResultOrder?.() ?? 'unknown',
+  });
 });
 
 app.post('/api/contact', async (req, res) => {

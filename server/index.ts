@@ -1,7 +1,11 @@
+import dns from 'node:dns';
 import express from 'express';
 import cors from 'cors';
 import nodemailer from 'nodemailer';
 
+// Render's outbound network has no IPv6 route; Node otherwise resolves
+// smtp.gmail.com to an AAAA (IPv6) record first → ENETUNREACH. Prefer IPv4.
+dns.setDefaultResultOrder('ipv4first');
 
 const app = express();
 

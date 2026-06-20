@@ -1,11 +1,6 @@
-import dns from 'node:dns';
 import express from 'express';
 import cors from 'cors';
-import nodemailer from 'nodemailer';
-
-// Render's outbound network has no IPv6 route; Node otherwise resolves
-// smtp.gmail.com to an AAAA (IPv6) record first → ENETUNREACH. Prefer IPv4.
-dns.setDefaultResultOrder('ipv4first');
+import { Resend } from 'resend';
 
 const app = express();
 
@@ -25,25 +20,14 @@ app.use(cors({
 }));
 app.use(express.json());
 
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,
-  connectionTimeout: 15000, // fail fast instead of hanging ~120s
-  greetingTimeout: 15000,
-  auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_PASS,
-  },
-});
+// Resend sends over HTTPS (port 443) → works on Render free (SMTP is blocked there).
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-transporter.verify((error) => {
-  if (error) {
-    console.error('[SMTP] Kết nối thất bại:', error.message);
-  } else {
-    console.log('[SMTP] Kết nối Gmail thành công ✓');
-  }
-});
+// Where contact messages land (your inbox).
+const CONTACT_TO = process.env.CONTACT_TO || 'binhnguyen290104@gmail.com';
+// Sender. Use onboarding@resend.dev until binhh.id.vn is verified in Resend,
+// then switch to e.g. "Portfolio <noreply@binhh.id.vn>".
+const RESEND_FROM = process.env.RESEND_FROM || 'Portfolio <onboarding@resend.dev>';
 
 function senderAvatarUrl(email: string, name: string, size = 80) {
   // unavatar.io fetches real avatars (Gravatar, GitHub, etc.)
@@ -180,8 +164,8 @@ function buildEmailHtml(name: string, email: string, message: string) {
 app.get('/api/health', (_req, res) => {
   res.json({
     status: 'ok',
-    build: 'smtp-465-ipv4',
-    dnsOrder: dns.getDefaultResultOrder?.() ?? 'unknown',
+    build: 'resend-http',
+    resendConfigured: Boolean(process.env.RESEND_API_KEY),
   });
 });
 
@@ -195,18 +179,23 @@ app.post('/api/contact', async (req, res) => {
   console.log(`[Contact] Nhận tin nhắn từ: ${name} <${email}>`);
 
   try {
-    const info = await transporter.sendMail({
-      from: `"Portfolio - ${name}" <${process.env.GMAIL_USER}>`,
-      to: process.env.GMAIL_USER,
-      replyTo: `"${name}" <${email}>`,
+    const { data, error } = await resend.emails.send({
+      from: RESEND_FROM,
+      to: CONTACT_TO,
+      replyTo: `${name} <${email}>`,
       subject: `[Portfolio] Tin nhắn từ ${name}`,
       html: buildEmailHtml(name, email, message),
     });
 
-    console.log('[Contact] Gửi thành công:', info.messageId);
-    return res.json({ success: true, id: info.messageId });
+    if (error) {
+      console.error('[Contact] Resend error:', error);
+      return res.status(500).json({ error: 'Không thể gửi email. Vui lòng thử lại.' });
+    }
+
+    console.log('[Contact] Gửi thành công:', data?.id);
+    return res.json({ success: true, id: data?.id });
   } catch (err: any) {
-    console.error('[Contact] SMTP error:', err.message);
+    console.error('[Contact] Resend error:', err.message);
     return res.status(500).json({ error: 'Không thể gửi email. Vui lòng thử lại.' });
   }
 });
